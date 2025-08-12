@@ -64,7 +64,7 @@ if st.button("Generate Music"):
 
     # Convert MIDI to WAV
     # Make sure FluidSynth can find your soundfont file (change path if needed)
-    soundfont_path = 'FluidR3_GM.sf2'  # put your .sf2 in the same folder or provide full path
+    soundfont_path = 'static/GeneralUser_GS_v1.472.sf2'  # put your .sf2 in the same folder or provide full path
     if not os.path.exists(soundfont_path):
         st.error(f"Soundfont file '{soundfont_path}' not found! Please upload it in the app directory.")
     else:
