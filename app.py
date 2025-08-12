@@ -2,18 +2,15 @@ import streamlit as st
 import numpy as np
 from music21 import instrument, stream, note, chord
 from keras.models import load_model
-from midi2audio import FluidSynth
 import os
 
-# --- MIDI creation function ---
 def create_midi(prediction_output, filename, transfer_dic):
     offset = 0
     midi_stream = stream.Stream()
     number_to_note = {v: k for k, v in transfer_dic.items()}
 
     for pattern_num in prediction_output:
-        pattern = number_to_note.get(int(pattern_num), 'C4')
-
+        pattern = number_to_note.get(pattern_num, 'C4')
         if pattern == 'R':
             midi_stream.append(note.Rest(quarterLength=0.5))
         elif '.' in pattern or pattern.isdigit():
@@ -31,22 +28,21 @@ def create_midi(prediction_output, filename, transfer_dic):
             new_note.offset = offset
             new_note.storedInstrument = instrument.Piano()
             midi_stream.append(new_note)
-
         offset += 0.5
 
     midi_stream.write('midi', fp=filename)
 
-# --- Load GAN model ---
-@st.cache_resource(show_spinner=False)
+# Your actual transfer dictionary here or load dynamically
+transfer_dic = {'C4': 0, 'D4': 1, 'E4': 2, 'R': 3}
+
+@st.cache_resource
 def load_generator_model():
     return load_model('gan_final.h5')
 
 model = load_generator_model()
 
-# --- Static note mapping dictionary ---
-transfer_dic = {'C4': 0, 'D4': 1, 'E4': 2, 'R': 3}
-
-st.title("🎹 Music GAN Generator with MIDI to Audio Playback")
+st.title("🎹 Music GAN Generator")
+st.write("Generate new music using your trained GAN model.")
 
 if st.button("Generate Music"):
     latent_dim = 1000
@@ -57,28 +53,18 @@ if st.button("Generate Music"):
     pred_nums = np.clip((prediction * boundary + boundary).astype(int), 0, len(transfer_dic) - 1)
 
     midi_filename = "generated_music.mid"
-    wav_filename = "generated_music.wav"
-
-    # Create MIDI file
     create_midi(pred_nums, midi_filename, transfer_dic)
 
-    # Convert MIDI to WAV
-    # Make sure FluidSynth can find your soundfont file (change path if needed)
-    soundfont_path = 'static/GeneralUser_GS_v1.472.sf2'  # put your .sf2 in the same folder or provide full path
-    if not os.path.exists(soundfont_path):
-        st.error(f"Soundfont file '{soundfont_path}' not found! Please upload it in the app directory.")
-    else:
-        fs = FluidSynth(sound_font=soundfont_path)
-        fs.midi_to_audio(midi_filename, wav_filename)
+    st.success("🎵 MIDI file generated! You can download and play it with any MIDI player.")
 
-        # Play WAV audio in Streamlit
-        with open(wav_filename, 'rb') as f:
-            audio_bytes = f.read()
-        st.audio(audio_bytes, format='audio/wav')
-
-    # Provide MIDI file download
     with open(midi_filename, 'rb') as f:
         midi_bytes = f.read()
 
-    st.download_button("Download MIDI file", midi_bytes, file_name=midi_filename, mime='audio/midi')
+    st.download_button(
+        label="Download MIDI file",
+        data=midi_bytes,
+        file_name=midi_filename,
+        mime='audio/midi'
+    )
 
+    st.info("Note: Most browsers cannot play MIDI files directly. Please download and open the file with a MIDI player like VLC, Windows Media Player, or DAWs.")
