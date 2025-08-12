@@ -12,7 +12,7 @@ def create_midi(prediction_output, filename, transfer_dic):
     number_to_note = {v: k for k, v in transfer_dic.items()}
 
     for pattern_num in prediction_output:
-        pattern = number_to_note.get(pattern_num, 'C4')
+        pattern = number_to_note.get(int(pattern_num), 'C4')
 
         if pattern == 'R':
             midi_stream.append(note.Rest(quarterLength=0.5))
