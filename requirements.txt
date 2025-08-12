@@ -1,0 +1,8 @@
+numpy
+matplotlib
+music21
+tensorflow
+keras
+h5py
+scipy
+midi2audio
