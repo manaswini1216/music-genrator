@@ -38,7 +38,7 @@ transfer_dic = {'C4': 0, 'D4': 1, 'E4': 2, 'R': 3}
 
 @st.cache(allow_output_mutation=True)
 def load_generator_model():
-    return load_model('gen_final.h5')
+    return load_model('gan_final.h5')
 
 model = load_generator_model()
 
