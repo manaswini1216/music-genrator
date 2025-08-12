@@ -11,7 +11,7 @@ def create_midi(prediction_output, filename, transfer_dic):
     number_to_note = {v: k for k, v in transfer_dic.items()}
 
     for pattern_num in prediction_output:
-        pattern = number_to_note.get(pattern_num, 'C4')  
+        pattern = number_to_note.get(pattern_num, 'C4')
 
         if pattern == 'R':
             midi_stream.append(note.Rest(quarterLength=0.5))
@@ -36,7 +36,7 @@ def create_midi(prediction_output, filename, transfer_dic):
 
 transfer_dic = {'C4': 0, 'D4': 1, 'E4': 2, 'R': 3}
 
-@st.cache(allow_output_mutation=True)
+@st.cache_resource  # updated cache decorator for loading models
 def load_generator_model():
     return load_model('gan_final.h5')
 
@@ -58,7 +58,14 @@ if st.button("Generate Music"):
 
     st.success("🎵 Music generated!")
 
-    audio_file = open(midi_filename, 'rb').read()
+    with open(midi_filename, 'rb') as f:
+        audio_file = f.read()
+
     st.audio(audio_file, format='audio/midi')
 
-    st.download_button(label="Download MIDI file", data=audio_file, file_name=midi_filename, mime='audio/midi')
+    st.download_button(
+        label="Download MIDI file", 
+        data=audio_file, 
+        file_name=midi_filename, 
+        mime='audio/midi'
+    )
