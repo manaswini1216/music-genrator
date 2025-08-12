@@ -11,7 +11,8 @@ def create_midi(prediction_output, filename, transfer_dic):
     number_to_note = {v: k for k, v in transfer_dic.items()}
 
     for pattern_num in prediction_output:
-        pattern = number_to_note.get(pattern_num, 'C4')
+        pattern_num_int = int(pattern_num)  # <-- added this
+        pattern = number_to_note.get(pattern_num_int, 'C4')
 
         if pattern == 'R':
             midi_stream.append(note.Rest(quarterLength=0.5))
@@ -33,6 +34,7 @@ def create_midi(prediction_output, filename, transfer_dic):
         offset += 0.5
 
     midi_stream.write('midi', fp=filename)
+
 
 transfer_dic = {'C4': 0, 'D4': 1, 'E4': 2, 'R': 3}
 
