@@ -2,17 +2,16 @@ import streamlit as st
 import numpy as np
 from music21 import instrument, stream, note, chord
 from keras.models import load_model
+from midi2audio import FluidSynth
 import os
 
 def create_midi(prediction_output, filename, transfer_dic):
     offset = 0
     midi_stream = stream.Stream()
-
     number_to_note = {v: k for k, v in transfer_dic.items()}
 
     for pattern_num in prediction_output:
-        pattern_num_int = int(pattern_num)  # <-- added this
-        pattern = number_to_note.get(pattern_num_int, 'C4')
+        pattern = number_to_note.get(pattern_num, 'C4')
 
         if pattern == 'R':
             midi_stream.append(note.Rest(quarterLength=0.5))
@@ -31,21 +30,20 @@ def create_midi(prediction_output, filename, transfer_dic):
             new_note.offset = offset
             new_note.storedInstrument = instrument.Piano()
             midi_stream.append(new_note)
+
         offset += 0.5
 
     midi_stream.write('midi', fp=filename)
 
-
-transfer_dic = {'C4': 0, 'D4': 1, 'E4': 2, 'R': 3}
-
-@st.cache_resource  # updated cache decorator for loading models
+@st.cache_resource(show_spinner=False)
 def load_generator_model():
     return load_model('gan_final.h5')
 
 model = load_generator_model()
 
-st.title("🎹 Music GAN Generator")
-st.write("Generate new music using your trained GAN model.")
+transfer_dic = {'C4': 0, 'D4': 1, 'E4': 2, 'R': 3}
+
+st.title("🎹 Music GAN Generator with MIDI to Audio Playback")
 
 if st.button("Generate Music"):
     latent_dim = 1000
@@ -53,21 +51,26 @@ if st.button("Generate Music"):
     prediction = model.predict(noise)[0]
 
     boundary = int(len(transfer_dic) / 2)
-    pred_nums = np.clip((prediction * boundary + boundary).astype(int), 0, len(transfer_dic)-1)
+    pred_nums = np.clip((prediction * boundary + boundary).astype(int), 0, len(transfer_dic) - 1)
 
     midi_filename = "generated_music.mid"
+    wav_filename = "generated_music.wav"
+
     create_midi(pred_nums, midi_filename, transfer_dic)
 
-    st.success("🎵 Music generated!")
+    soundfont_path = 'FluidR3_GM.sf2'  
+    if not os.path.exists(soundfont_path):
+        st.error(f"Soundfont file '{soundfont_path}' not found! Please upload it in the app directory.")
+    else:
+        fs = FluidSynth(sound_font=soundfont_path)
+        fs.midi_to_audio(midi_filename, wav_filename)
+
+        with open(wav_filename, 'rb') as f:
+            audio_bytes = f.read()
+        st.audio(audio_bytes, format='audio/wav')
 
     with open(midi_filename, 'rb') as f:
-        audio_file = f.read()
+        midi_bytes = f.read()
 
-    st.audio(audio_file, format='audio/midi')
+    st.download_button("Download MIDI file", midi_bytes, file_name=midi_filename, mime='audio/midi')
 
-    st.download_button(
-        label="Download MIDI file", 
-        data=audio_file, 
-        file_name=midi_filename, 
-        mime='audio/midi'
-    )
