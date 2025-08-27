@@ -37,7 +37,6 @@ def load_transfer(transfer_path=TRANSFER_PKL):
             st.warning(f"Failed to load {transfer_path}: {e}. Using fallback mapping.")
             return make_fallback_transfer()
     else:
-        st.info(f"No {transfer_path} found in repo — using fallback mapping.")
         return make_fallback_transfer()
         
 def create_midi_from_indices(indices, transfer_dic, out_path):
