@@ -12,10 +12,11 @@ MODEL_PATH = "gan_final.h5"
 TRANSFER_PKL = "transfer_dic.pkl"
 OUTPUT_FOLDER = "static"
 OUTPUT_FILENAME = "generated_music.mid"
-BASE_QUARTER = 0.5
+DURATION_QUARTER = 0.5
 
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
+# ---------- Transfer Mapping ----------
 def make_fallback_transfer():
     octaves = [3, 4, 5]
     notes = []
@@ -40,72 +41,60 @@ def load_transfer(transfer_path=TRANSFER_PKL):
         st.info(f"No {transfer_path} found in repo — using fallback mapping.")
         return make_fallback_transfer()
 
+transfer_dic = load_transfer()
+
+# ---------- MIDI Creation ----------
 def create_midi_from_indices(indices, transfer_dic, out_path):
+    """Keep this function unchanged to preserve musical style."""
     number_to_note = {v:k for k,v in transfer_dic.items()}
     if not out_path.lower().endswith(".mid"):
-        out_path += ".mid"
+        out_path = out_path + ".mid"
 
     midi_stream = stream.Stream()
     offset = 0.0
     for idx in indices:
         try:
             idx = int(idx)
-        except:
+        except Exception:
             continue
         pattern = number_to_note.get(idx, 'C4')
-
-        # small probability for rest
-        if np.random.rand() < 0.05:
-            pattern = 'R'
-
-        # mostly fixed duration
-        dur = 0.5
-        if np.random.rand() < 0.2:
-            dur = np.random.choice([0.25, 0.75])
-
         if pattern == 'R':
-            r = note.Rest(quarterLength=dur)
+            r = note.Rest(quarterLength=DURATION_QUARTER)
             r.offset = offset
             midi_stream.append(r)
         elif '.' in pattern:
             parts = pattern.split('.')
-            notes_list = []
+            notes = []
             for p in parts:
                 try:
                     n = note.Note(p)
                     n.storedInstrument = instrument.Piano()
-                    n.quarterLength = dur
-                    # occasional octave shift
-                    if np.random.rand() < 0.1:
-                        n.octave += np.random.choice([-1,1])
-                    notes_list.append(n)
+                    n.quarterLength = DURATION_QUARTER
+                    notes.append(n)
                 except:
                     pass
-            if notes_list:
-                ch = chord.Chord(notes_list)
+            if notes:
+                ch = chord.Chord(notes)
                 ch.offset = offset
-                ch.quarterLength = dur
+                ch.quarterLength = DURATION_QUARTER
                 midi_stream.append(ch)
         else:
             try:
                 n = note.Note(pattern)
                 n.offset = offset
                 n.storedInstrument = instrument.Piano()
-                n.quarterLength = dur
-                if np.random.rand() < 0.1:
-                    n.octave += np.random.choice([-1,1])
+                n.quarterLength = DURATION_QUARTER
                 midi_stream.append(n)
             except:
-                r = note.Rest(quarterLength=dur)
+                r = note.Rest(quarterLength=DURATION_QUARTER)
                 r.offset = offset
                 midi_stream.append(r)
-
-        offset += dur
+        offset += DURATION_QUARTER
 
     midi_stream.write('midi', fp=out_path)
     return out_path
 
-
+# ---------- Model Utilities ----------
 def make_noise_for_model(model):
     ishape = model.input_shape
     if isinstance(ishape, list):
@@ -117,8 +106,6 @@ def make_noise_for_model(model):
     return np.random.normal(0,1,size=noise_shape).astype(np.float32), noise_shape
 
 def prediction_to_indices(pred_array, n_tokens):
-    # Add tiny noise for variety
-    pred_array = pred_array + np.random.normal(0, 0.05, size=pred_array.shape)
     seq = pred_array
     smin, smax = float(seq.min()), float(seq.max())
     if smin >= -1.0 - 1e-6 and smax <= 1.0 + 1e-6:
@@ -131,8 +118,7 @@ def prediction_to_indices(pred_array, n_tokens):
             idxs = np.clip(np.round(norm * (n_tokens - 1)).astype(int), 0, n_tokens - 1)
     return idxs
 
-transfer_dic = load_transfer()
-
+# ---------- Load Model ----------
 @st.cache_resource
 def load_generator_model(path=MODEL_PATH):
     if not os.path.exists(path):
@@ -150,16 +136,17 @@ except Exception as e:
 st.write("Model input shape:", model.input_shape)
 st.write("Transfer mapping size (tokens):", len(transfer_dic))
 
+# ---------- UI ----------
 st.markdown("Press **Generate** to create a MIDI and then use **Download** to save it.")
 num_notes = st.slider("Select number of notes", min_value=50, max_value=600, value=300, step=50)
 
 if st.button("Generate"):
+    predictions = []
     noise, noise_shape = make_noise_for_model(model)
     chunk_size = noise_shape[1]
     total_chunks = int(np.ceil(num_notes / chunk_size))
 
-    predictions = []
-    for _ in range(total_chunks):
+    for i in range(total_chunks):
         try:
             pred = model.predict(noise, verbose=0)
         except:
@@ -189,3 +176,6 @@ if st.button("Generate"):
         midi_bytes = f.read()
     st.success("✅ MIDI generated successfully!")
     st.download_button("⬇️ Download MIDI", data=midi_bytes, file_name="generated_music.mid", mime="audio/midi")
+
+st.markdown("---")
+st.markdown("⚠️ Without the original transfer_dic.pkl from training, music may sound slightly different each time due to fallback mapping.")
