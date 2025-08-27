@@ -26,7 +26,6 @@ class MODEL():
         generated_seq = self.generator(z)
 
         self.discriminator.trainable = False
-
         validity = self.discriminator(generated_seq)
 
         self.combined = Model(z, validity)
@@ -44,7 +43,6 @@ class MODEL():
 
         seq = Input(shape=self.seq_shape)
         validity = model(seq)
-
         return Model(seq, validity)
 
     def build_generator(self):
@@ -65,13 +63,11 @@ class MODEL():
 
         noise = Input(shape=(self.latent_dim, 1))
         seq = model(noise)
-
         return Model(noise, seq)
 
     def train(self, epochs, dataFolder, batch_size=128, sample_interval=50):
         self.midi.parser(dataFolder)
         sequences = self.midi.prepare_sequences()
-
         print(f"\nNumber of sequences for training: {sequences.shape[0]}\n")
 
         real = np.ones((batch_size, 1))
@@ -106,13 +102,32 @@ class MODEL():
         self.generator.save('Model/generator.h5')
         print("Saved discriminator and generator models in 'Model/' folder.")
 
-    def generate(self):
-        """Generate music using the trained generator."""
-        noise = np.random.normal(0, 1, (1, self.latent_dim))
-        predictions = self.generator.predict(noise)
+    def generate(self, num_notes=300, fresh_noise=True):
+        """Generate music using the trained generator and return list of note indices."""
+        # Detect seq_len
+        noise = np.random.normal(0,1,(1,self.latent_dim,1))
+        pred = self.generator.predict(noise)[0].squeeze()
+        if pred.ndim == 2:
+            pred = pred.mean(axis=-1)
+        seq_len = len(pred)
+
+        # Determine chunks needed
+        import math
+        chunks = max(1, math.ceil(num_notes / seq_len))
+        seq_parts = [pred]
+
+        for _ in range(1, chunks):
+            if fresh_noise:
+                noise = np.random.normal(0,1,(1,self.latent_dim,1))
+            pred_chunk = self.generator.predict(noise)[0].squeeze()
+            if pred_chunk.ndim == 2:
+                pred_chunk = pred_chunk.mean(axis=-1)
+            seq_parts.append(pred_chunk)
+
+        full_seq = np.concatenate(seq_parts)[:num_notes]
 
         boundary = int(len(self.midi.transfer_dic) / 2)
-        pred_nums = [x * boundary + boundary for x in predictions[0]]
+        pred_nums = [x * boundary + boundary for x in full_seq]
         notes = list(self.midi.transfer_dic.keys())
         pred_notes = [notes[int(x)] for x in pred_nums]
 
@@ -120,6 +135,7 @@ class MODEL():
             os.makedirs('Result/')
 
         self.midi.create_midi(pred_notes, 'Result/gan_final')
+        return pred_notes
 
     def plot_loss(self):
         plt.plot(self.disc_loss, color='red')
