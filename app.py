@@ -8,7 +8,6 @@ from music21 import instrument, stream, note, chord
 st.set_page_config(page_title="Music GAN Generator", layout="centered")
 st.title("🎹 Music GAN Generator — Generate & Download MIDI")
 
-# ---------- CONFIG ----------
 MODEL_PATH = "gan_final.h5"
 TRANSFER_PKL = "transfer_dic.pkl"
 OUTPUT_FOLDER = "static"
@@ -17,7 +16,6 @@ DURATION_QUARTER = 0.5
 
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
-# ---------- Helpers ----------
 def make_fallback_transfer():
     octaves = [3, 4, 5]
     notes = []
@@ -91,15 +89,15 @@ def create_midi_from_indices(indices, transfer_dic, out_path):
     midi_stream.write('midi', fp=out_path)
     return out_path
 
-def make_noise_for_model(model):
+def make_noise_for_model(model, batch_size=1):
     ishape = model.input_shape
     if isinstance(ishape, list):
         ishape = ishape[0]
     dims = tuple(d for d in ishape[1:] if d is not None)
     if len(dims) == 0:
         dims = (100,)
-    noise_shape = (1,) + dims
-    return np.random.normal(0,1,size=noise_shape).astype(np.float32), noise_shape
+    noise_shape = (batch_size,) + dims
+    return np.random.normal(0,1,size=noise_shape).astype(np.float32)
 
 def prediction_to_indices(pred_array, n_tokens):
     seq = pred_array
@@ -114,10 +112,8 @@ def prediction_to_indices(pred_array, n_tokens):
             idxs = np.clip(np.round(norm * (n_tokens - 1)).astype(int), 0, n_tokens - 1)
     return idxs
 
-# ---------- Load transfer mapping ----------
 transfer_dic = load_transfer()
 
-# ---------- Load model ----------
 @st.cache_resource
 def load_generator_model(path=MODEL_PATH):
     if not os.path.exists(path):
@@ -135,47 +131,40 @@ except Exception as e:
 st.write("Model input shape:", model.input_shape)
 st.write("Transfer mapping size (tokens):", len(transfer_dic))
 
-# ---------- UI ----------
 st.markdown("Press **Generate** to create a MIDI and then use **Download** to save it.")
-num_notes = st.slider("Select number of notes", min_value=50, max_value=600, value=300, step=50)
+num_notes = st.slider("Select number of notes", min_value=50, max_value=2000, value=500, step=50)
 
 if st.button("Generate"):
-    noise, noise_shape = make_noise_for_model(model)
-    st.write("Noise shape:", noise_shape)
-
-    predictions = []
-    chunk_size = noise_shape[1]  # default 50 from training
-
+    all_indices = []
+    chunk_size = model.output_shape[1]
     total_chunks = int(np.ceil(num_notes / chunk_size))
 
     for i in range(total_chunks):
+        noise = make_noise_for_model(model)
         try:
             pred = model.predict(noise, verbose=0)
         except:
             pred = model(noise, training=False).numpy()
 
-        if isinstance(pred, np.ndarray):
-            if pred.ndim == 3:
-                seq = pred[0].squeeze()
-                if seq.ndim == 2:
-                    seq = seq.mean(axis=-1)
-            elif pred.ndim == 2:
-                seq = pred[0]
-            else:
-                seq = pred.flatten()
+        if pred.ndim == 3:
+            seq = pred[0].squeeze()
+            if seq.ndim == 2:
+                seq = seq.mean(axis=-1)
+        elif pred.ndim == 2:
+            seq = pred[0]
         else:
-            st.error("Unexpected prediction type.")
-            st.stop()
+            seq = pred.flatten()
 
-        predictions.append(seq)
+        idxs = prediction_to_indices(seq, len(transfer_dic))
+        all_indices.extend(idxs.tolist())
 
-    full_seq = np.concatenate(predictions)[:num_notes]
-
-    indices = prediction_to_indices(full_seq, len(transfer_dic))
+    # trim to desired length
+    all_indices = all_indices[:num_notes]
     out_path = os.path.join(OUTPUT_FOLDER, OUTPUT_FILENAME)
-    created = create_midi_from_indices(indices, transfer_dic, out_path)
+    create_midi_from_indices(all_indices, transfer_dic, out_path)
 
-    with open(created, "rb") as f:
+    with open(out_path, "rb") as f:
         midi_bytes = f.read()
-    st.success("✅ MIDI generated successfully!")
+
+    st.success(f"✅ MIDI generated ({len(all_indices)} notes)!")
     st.download_button("⬇️ Download MIDI", data=midi_bytes, file_name="generated_music.mid", mime="audio/midi")
