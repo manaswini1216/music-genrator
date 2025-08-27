@@ -54,12 +54,14 @@ def create_midi_from_indices(indices, transfer_dic, out_path):
             continue
         pattern = number_to_note.get(idx, 'C4')
 
-        # Add random rests occasionally
-        if np.random.rand() < 0.1:
+        # small probability for rest
+        if np.random.rand() < 0.05:
             pattern = 'R'
 
-        # Randomize duration slightly
-        dur = np.random.choice([0.25, 0.5, 0.75, 1.0])
+        # mostly fixed duration
+        dur = 0.5
+        if np.random.rand() < 0.2:
+            dur = np.random.choice([0.25, 0.75])
 
         if pattern == 'R':
             r = note.Rest(quarterLength=dur)
@@ -73,8 +75,8 @@ def create_midi_from_indices(indices, transfer_dic, out_path):
                     n = note.Note(p)
                     n.storedInstrument = instrument.Piano()
                     n.quarterLength = dur
-                    # random octave shift
-                    if np.random.rand() < 0.3:
+                    # occasional octave shift
+                    if np.random.rand() < 0.1:
                         n.octave += np.random.choice([-1,1])
                     notes_list.append(n)
                 except:
@@ -90,7 +92,7 @@ def create_midi_from_indices(indices, transfer_dic, out_path):
                 n.offset = offset
                 n.storedInstrument = instrument.Piano()
                 n.quarterLength = dur
-                if np.random.rand() < 0.3:
+                if np.random.rand() < 0.1:
                     n.octave += np.random.choice([-1,1])
                 midi_stream.append(n)
             except:
@@ -102,6 +104,7 @@ def create_midi_from_indices(indices, transfer_dic, out_path):
 
     midi_stream.write('midi', fp=out_path)
     return out_path
+
 
 def make_noise_for_model(model):
     ishape = model.input_shape
